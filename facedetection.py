@@ -4,94 +4,82 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 import os
+import time
 
-# ---------- LOAD HAAR CASCADES ----------
+# Load face detector
 face = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_frontalface_default.xml')
-eye  = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_eye.xml')
 
-if face.empty():
-    print("Face cascade not loaded")
-    exit()
-else:
-    print("Face model loaded")
+# Email details
+EMAIL = "here enter email from where you have to send"
+PASSWORD = "APP Password enter here"   
+TO = "here enter to whom you want to send this email"
 
-# ---------- EMAIL FUNCTION ----------
-def send_email(image_path):
-    EMAIL = "replace here with origional email"
-    PASSWORD = "" # USE APP PASSWORD 
-    TO = "replace here with origional email"
-
+def send_email(img):
     msg = EmailMessage()
-    msg['Subject'] = " FACE DETECTED ALERT"
+    msg['Subject'] = "PERSON DETECTED"
     msg['From'] = EMAIL
     msg['To'] = TO
-    msg.set_content("Face detected. Screenshot attached.")
+    msg.set_content("New person detected by camera.")
 
-    with open(image_path, 'rb') as f:
-        msg.add_attachment(f.read(), maintype='image', subtype='jpeg', filename=image_path)
+    with open(img, 'rb') as f:
+        msg.add_attachment(f.read(), maintype='image', subtype='jpeg', filename=img)
 
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(EMAIL, PASSWORD)
-        smtp.send_message(msg)
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        s.login(EMAIL, PASSWORD)
+        s.send_message(msg)
 
-    print(" EMAIL SENT")
-
-# ---------- MOBILE CAMERA URL ----------
+# Camera
 cam = cv.VideoCapture(0)
+os.makedirs("persons", exist_ok=True)
 
-if not cam.isOpened():
-    print("Camera not accessible")
-    exit()
+sent_faces = {}   # stores/remember who already got emailed
+WAIT = 10         # 10 sec takes before resending same person
 
-sent = False
-beeped = False
-
-# ---------- LOOP ----------
 while True:
     ret, frame = cam.read()
     if not ret:
-        print("Cannot grab frame")
         break
 
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-    blur = cv.GaussianBlur(gray, (3,3), 2)
+    faces = face.detectMultiScale(gray, 1.2, 5)
+    now = time.time()
 
-    faces = face.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=6)
-    real_faces = []
+    for (x,y,w,h) in faces:
 
-    # FILTER SMALL FALSE DETECTIONS
-    for (x, y, w, h) in faces:
-        if w > 100 and h > 100:
-            real_faces.append((x,y,w,h))
-            cv.rectangle(frame, (x,y), (x+w, y+h), (0,255,0), 2)
+        if w < 80 or h < 80:
+            continue
 
-    # ---------- ALERT LOGIC ----------
-    if len(real_faces) > 0:
+        # Unique ID from face location
+        key = f"{x}_{y}_{w}_{h}"
 
-        # BEEP ONCE
-        if not beeped:
-            winsound.Beep(2500, 300)
-            beeped = True
+        # skip if already emailed recently
+        if key in sent_faces and now - sent_faces[key] < WAIT:
+            continue
 
-        # EMAIL ONCE
-        if not sent:
-            os.makedirs("detected_faces", exist_ok=True)
-            filename = f"detected_faces/detected_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            cv.imwrite(filename, frame)
-            send_email(filename)
-            sent = True
-    else:
-        beeped = False
-        sent = False
+        sent_faces[key] = now
 
-    # DISPLAY WINDOW
-    cv.imshow("Face Detection", frame)
+        # Approximate body
+        body = frame[y:y+6*h, max(0,x-w//2):x+w+w//2]
 
-    # ESC TO EXIT
+        if body.size == 0:
+            continue
+
+        filename = f"persons/person_{datetime.now().strftime('%H%M%S_%f')}.jpg"
+        cv.imwrite(filename, body)
+        
+
+        winsound.Beep(2200, 200)
+        send_email(filename)
+
+        # Draw boxes
+        cv.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),2)
+        cv.rectangle(frame,(max(0,x-w//2),y),(x+w+w//2,y+6*h),(255,0,0),2)
+        cv.putText(frame, "EMAIL SENT", (x,y-10),cv.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+    cv.imshow("Multi Person Email System", frame)
+
     if cv.waitKey(1) == 27:
         break
 
-# RELEASE
 cam.release()
 cv.destroyAllWindows()
-

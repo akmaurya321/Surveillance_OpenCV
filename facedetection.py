@@ -17,9 +17,9 @@ else:
 
 # ---------- EMAIL FUNCTION ----------
 def send_email(image_path):
-    EMAIL = "arvindg12125@gmail.com"
-    PASSWORD = "zrxcycicfsippzkk" # USE APP PASSWORD 
-    TO = "aiuse12125@gmail.com"
+    EMAIL = "replace here with origional email"
+    PASSWORD = "" # USE APP PASSWORD 
+    TO = "replace here with origional email"
 
     msg = EmailMessage()
     msg['Subject'] = " FACE DETECTED ALERT"
@@ -94,3 +94,4 @@ while True:
 # RELEASE
 cam.release()
 cv.destroyAllWindows()
+
